@@ -1,0 +1,54 @@
+name: Build Scriba Monitor
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            name: macOS
+            cmake_args: -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          - os: windows-latest
+            name: Windows
+            cmake_args: ""
+
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configura
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_args }}
+
+      - name: Compila
+        run: cmake --build build --config Release --parallel
+
+      - name: Test del motore DSP (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cmake -S . -B build-tests -DCMAKE_BUILD_TYPE=Release -DSCRIBA_BUILD_TESTS=ON
+          cmake --build build-tests --target ScribaDspTest --parallel
+          ./build-tests/ScribaDspTest_artefacts/Release/ScribaDspTest
+
+      - name: Raccogli i file
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp -R "build/ScribaMonitor_artefacts/Release/VST3/Scriba Monitor.vst3" dist/
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            cp -R "build/ScribaMonitor_artefacts/Release/AU/Scriba Monitor.component" dist/
+            cp -R "build/ScribaMonitor_artefacts/Release/Standalone/Scriba Monitor.app" dist/
+          else
+            cp "build/ScribaMonitor_artefacts/Release/Standalone/Scriba Monitor.exe" dist/
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ScribaMonitor-${{ matrix.name }}
+          path: dist
